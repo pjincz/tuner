@@ -23,7 +23,12 @@
         const noteNames = ["C", "C#/bD", "D", "D#/bE", "E", "F", "F#/bG", "G", "G#/bA", "A", "A#/bB", "B"];
 
         async function startTuner() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                }});
             const audioCtx = new AudioContext();
             const analyser = audioCtx.createAnalyser();
             const source = audioCtx.createMediaStreamSource(stream);
