@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Tuner</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        h1 { font-size: 2em; }
+        #note { font-size: 3em; font-weight: bold; }
+        #pitch, #freq, #vol { font-size: 1.5em; }
+    </style>
+</head>
+<body>
+    <h1>Online Tuner</h1>
+    <button id="start">Start</button>
+    <p>Note: <span id="note">--</span></p>
+    <p>Pitch: <span id="pitch">--</span></p>
+    <p>Freq: <span id="freq">--</span> Hz</p>
+    <p>Volume: <span id="vol">--</span></p>
+
+    <script>
+        const noteNames = ["C", "C#/bD", "D", "D#/bE", "E", "F", "F#/bG", "G", "G#/bA", "A", "A#/bB", "B"];
+
+        async function startTuner() {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioCtx = new AudioContext();
+            const analyser = audioCtx.createAnalyser();
+            const source = audioCtx.createMediaStreamSource(stream);
+            source.connect(analyser);
+
+            analyser.fftSize = 2048;
+            const bufferLength = analyser.fftSize;
+            const dataArray = new Float32Array(bufferLength);
+
+            function fundamentalFreq(buffer, sampleRate) {
+                let SIZE = buffer.length;
+                let difference = new Float32Array(SIZE / 2);
+
+                let bestTau = -1;
+                let bestError = Infinity;
+
+                let threshold = 2;
+
+                let sum2 = 0;
+                for (let i = 0; i < SIZE; ++i) {
+                    sum2 += buffer[i] * buffer[i];
+                }
+
+                if (sum2 / SIZE < 0.0001) {
+                    return -1;
+                }
+
+                // calculate differences
+                for (let tau = 1; tau < difference.length; tau++) {
+                    let sum = 0;
+                    for (let i = 0; i < SIZE / 2; i++) {
+                        let diff = buffer[i] - buffer[i + tau];
+                        sum += diff * diff;
+                    }
+                    difference[tau] = sum / sum2;
+                }
+
+                for (let tau = 5; tau < difference.length; tau++) {
+                    let error = difference[tau] / difference[Math.ceil(tau / 2)] * tau;
+                    if (error < bestError) {
+                        bestError = error;
+                        bestTau = tau;
+                    }
+                }
+
+                console.log(bestTau, bestError);
+
+                if (bestError > threshold) {
+                    return -1;
+                }
+
+                while (bestTau > 0 && difference[bestTau - 1] < difference[bestTau]) {
+                    bestTau -= 1;
+                }
+
+                while (bestTau + 1 < difference.length && difference[bestTau + 1] < difference[bestTau]) {
+                    bestTau += 1;
+                }
+
+                if (bestTau == 0 || bestTau == difference.length - 1) {
+                    return -1;
+                }
+
+                // parabolic interpolation
+                let d1 = difference[bestTau - 1];
+                let d2 = difference[bestTau];
+                let d3 = difference[bestTau + 1];
+                bestTau += (d1 - d3) / (2 * (d1 - 2 * d2 + d3));
+
+                return sampleRate / bestTau;
+            }
+
+            function Volume(buffer) {
+                let sum2 = 0;
+                for (let x of buffer) {
+                    sum2 += x * x;
+                }
+                return Math.sqrt(sum2 / buffer.length);
+            }
+
+            function updatePage() {
+                analyser.getFloatTimeDomainData(dataArray);
+                let freq = fundamentalFreq(dataArray, audioCtx.sampleRate);
+                if (freq !== -1) {
+                    let pitch = 12 * (Math.log2(freq / 440)) + 69;
+                    let note = noteNames[Math.round(pitch) % 12] + (Math.floor(Math.round(pitch) / 12) - 1);
+                    document.getElementById("note").innerText = note;
+                    document.getElementById("freq").innerText = freq.toFixed(2);
+                    document.getElementById("pitch").innerText = pitch.toFixed(2);
+                } else {
+                    document.getElementById("note").innerText = "--";
+                    document.getElementById("freq").innerText = "--";
+                    document.getElementById("pitch").innerText = "--";
+                }
+                let v = Volume(dataArray);
+                document.getElementById("vol").innerText = v.toFixed(4);
+                requestAnimationFrame(updatePage);
+            }
+
+            updatePage();
+        }
+
+        document.getElementById("start").addEventListener("click", startTuner);
+    </script>
+</body>
+</html>
