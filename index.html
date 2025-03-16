@@ -52,7 +52,7 @@
                     sum2 += buffer[i] * buffer[i];
                 }
 
-                if (sum2 / SIZE < 0.0001) {
+                if (Math.sqrt(sum2 / SIZE) < 0.001) {
                     return -1;
                 }
 
